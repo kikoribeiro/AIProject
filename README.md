@@ -3,10 +3,16 @@
 Starter base for an Introduction to AI project in **Python**.
 
 ## Included base
-- Minimal neural-network implementation in `src/ai_project/neural_network.py`
+- Minimal pure-Python neural network in `src/ai_project/neural_network.py`
+- PyTorch neural network in `src/ai_project/torch_model.py`
 - Runnable example script in `main.py`
-- Starter test in `tests/test_neural_network.py`
+- Starter tests in `tests/`
 - Planning/prep guide in `START_HERE.md`
+
+## Install dependencies
+```bash
+pip install -r requirements.txt
+```
 
 ## Run
 ```bash
