@@ -26,6 +26,7 @@ class SimpleNeuralNetwork:
 
     @staticmethod
     def _sigmoid(x: float) -> float:
+        x = max(min(x, 500.0), -500.0)
         return 1.0 / (1.0 + math.exp(-x))
 
     @staticmethod

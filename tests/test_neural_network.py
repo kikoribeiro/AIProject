@@ -12,6 +12,8 @@ class SimpleNeuralNetworkTests(unittest.TestCase):
 
         self.assertGreaterEqual(prediction, 0.0)
         self.assertLessEqual(prediction, 1.0)
+        self.assertGreater(model.predict([0.9, 0.9]), 0.5)
+        self.assertLess(model.predict([0.1, 0.1]), 0.5)
 
 
 if __name__ == "__main__":
