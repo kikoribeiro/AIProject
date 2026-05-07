@@ -7,8 +7,11 @@ numpy>=2.4.4
 # Data manipulation and CSV loading
 pandas>=3.0.2
 
-# ML utilities: train/test split, accuracy metrics, label encoding
+# ML utilities: train/test split, accuracy metrics, label encoding, datasets (Iris)
 scikit-learn>=1.8.0
 
 # Plots: loss curves, feature importance, confusion matrix
 matplotlib>=3.10.9
+
+# Interactive web app for CM exploration
+streamlit>=1.45.0
