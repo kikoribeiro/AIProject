@@ -1,5 +1,5 @@
 # Core deep learning
-torch>=2.11.0
+tensorflow>=2.16.1
 
 # Numerical computation
 numpy>=2.4.4
@@ -9,6 +9,7 @@ pandas>=3.0.2
 
 # ML utilities: train/test split, accuracy metrics, label encoding, datasets (Iris)
 scikit-learn>=1.8.0
+joblib>=1.5.0
 
 # Plots: loss curves, feature importance, confusion matrix
 matplotlib>=3.10.9

@@ -1,213 +1,162 @@
-# AIProject — Confusion Matrix + Streamlit (Project Guide)
+# AIProject — ATP Tennis Favorite Wins (Project Guide)
 
 This repository is a starter base for an **Introduction to AI / Machine Learning** project in **Python**.
 
-This guide proposes a concrete project focus aligned with the course topics you listed:
-
-- **Confusion Matrix (CM)** for classification (and how to adapt the idea for regression)
-- Consolidation of **metrics** derived from CM (accuracy, precision, recall, F1, …)
-- A small **interactive Streamlit app** to explore predictions, errors and metrics
-- An ANN-based example (optional): a small neural network model, evaluated with CM
-
-> Note: you asked to **ignore the provided ZIPs/PDFs**. This repo will be self-contained.
+The project focus is a **binary classifier (ANN/MLP)** that predicts whether the **favorite player wins** an ATP match.
+The emphasis is not just accuracy, but **confusion matrix evaluation** and **explainability**.
 
 ---
 
-## What is Streamlit (and why use it here)?
+## Objective
 
-[Streamlit](https://streamlit.io/) is a Python framework for building **interactive data/ML web apps** with minimal boilerplate.
-
-- You write a normal Python script (e.g. `streamlit run app.py`).
-- Widgets (sliders, dropdowns, file upload) are created via Python functions.
-- It’s ideal for ML demos: you can show a model’s prediction + confusion matrix + plots in a browser.
-
-In this project, Streamlit will be used to:
-
-- Load a dataset (or generate synthetic data)
-- Train or load a model
-- Show predictions and a **confusion matrix**
-- Compute and explain metrics
+- **Target ($y$):** 1 if the favorite (higher-ranked player) wins, 0 if the underdog wins.
+- **Model:** MLP (Keras/TensorFlow) with two hidden layers.
+- **Evaluation:** confusion matrix + precision/recall/F1.
+- **Explainability:** feature-importance proxy from learned weights.
 
 ---
 
-## Recommended project focus (so you don’t get stuck choosing)
+## Dataset
 
-If you’re unsure of the focus, this is a safe, coherent scope:
+Source: Kaggle **"ATP Tennis Dataset (2000–2025)"**.
 
-### **Focus**: Confusion Matrix + Metrics + Explainability (Classification)
+For this project, use matches from **2018–2026**.
 
-1. Implement a reusable CM + metrics module.
-2. Use a simple classifier (baseline) and show how metrics change.
-3. Build a Streamlit app to explore:
-   - the confusion matrix
-   - per-class errors
-   - threshold effects (binary)
+Required columns (present in your file):
 
-### Optional extensions (only if time allows)
-
-- ANN example (PyTorch): evaluate an ANN with the same CM/metrics utilities.
-- “Regression confusion matrix”: explain limitations and implement a **binned confusion matrix** for regression targets.
+- `Date`
+- `Rank_1`, `Rank_2`
+- `Player_1`, `Player_2`, `Winner`
+- `Surface` (or `Surface_Encoded`)
 
 ---
 
-## Deliverables (what you should be able to show)
+## Feature engineering
 
-1. **A documented metrics module**
-   - Confusion matrix computation
-   - Accuracy/precision/recall/F1
-   - Macro/micro/weighted averages (multi-class)
-   - Normalized CM (row-normalized recommended)
+Define the favorite as the **lower rank number**:
 
-2. **A Streamlit app**
-   - Controls to select dataset/model
-   - Visual confusion matrix (matplotlib)
-   - Metric cards + short explanations
-   - Error inspection: “most confused classes”
+- `Rank_Diff` = rank(favorite) - rank(underdog)
+- `Surface_Encoded` = label-encoded surface (Clay/Grass/Hard)
+- `Favorite_Form` = rolling win rate of the favorite (previous matches only)
+- `Underdog_Form` = rolling win rate of the underdog (previous matches only)
 
-3. **A short report section in README**
-   - What CM is and what it measures
-   - Why accuracy can be misleading
-   - What precision/recall trade off means
+Handle NaNs by filling with the column median.
 
 ---
 
-## Proposed repository structure
+## Model architecture (Keras)
 
+- Input layer: 4 features
+- Hidden layer 1: 12 neurons, ReLU
+- Hidden layer 2: 8 neurons, ReLU
+- Output: 1 neuron, Sigmoid
+
+Loss: `binary_crossentropy`, optimizer: Adam.
+
+---
+
+## Training strategy
+
+- **Stratified K-Fold Cross-Validation** to handle class imbalance.
+- Standardize features per fold (fit on train, transform on test).
+
+---
+
+## Evaluation
+
+- Favorite-always-wins baseline comparison
+- Confusion matrix (raw + normalized)
+- Precision, Recall, and F1:
+
+$$
+F_1 = 2 \cdot \frac{\text{Precision} \cdot \text{Recall}}{\text{Precision} + \text{Recall}}
+$$
+
+The baseline predicts `1` for every match. This gives a simple benchmark for
+checking whether the MLP is better than always guessing that the higher-ranked
+favorite wins.
+
+---
+
+## Explainability
+
+Report a simple feature-importance proxy:
+
+- Average absolute weight magnitude from the first dense layer
+
+This mirrors the idea of “weight influence” shown in the fw/bw visualization lectures.
+
+---
+
+## Streamlit app
+
+The app at `apps/confusion_matrix_app.py`:
+
+- Loads the ATP CSV
+- Filters to 2018–2026
+- Loads the saved model/scaler artifacts created by the notebook or CLI
+- Displays confusion matrix + metrics + feature importance
+- Exports the confusion matrix as a PDF
+- Lets you pick two players and predict win probabilities
+
+---
+
+## Setup tutorial (start to finish)
+
+1. **Install Python 3.10+** if needed.
+2. **Create a virtual environment** (recommended):
+
+```bash
+python -m venv .venv
 ```
-AIProject/
-  README.md
-  START_HERE.md
-  requirements.txt
-  main.py
 
-  src/ai_project/
-    __init__.py
-    neural_network.py
-    torch_model.py
+3. **Activate the environment**:
 
-  # New (proposed)
-  src/ai_project/metrics/
-    confusion_matrix.py
-    classification_metrics.py
-    plots.py
+- Windows PowerShell:
+  ```bash
+  .venv\Scripts\Activate.ps1
+  ```
+- Windows CMD:
+  ```bash
+  .venv\Scripts\activate.bat
+  ```
 
-  apps/
-    confusion_matrix_app.py
+4. **Install dependencies**:
 
-  docs/
-    PROJECT_PLAN.md
-
-  tests/
-    test_confusion_matrix.py
-    test_metrics.py
-```
-
----
-
-## Plan / guide (step-by-step)
-
-### Step 1 — Define the “dataset + task”
-Pick one of these (in increasing complexity):
-
-- **Synthetic 2D classification** (recommended first):
-  - easy to visualize
-  - quick to train
-  - great to demonstrate CM behavior
-- Iris dataset (scikit-learn)
-- MNIST/Fashion-MNIST (heavier; needs extra deps and training time)
-
-Recommendation: start with **synthetic 2D** + one baseline model.
-
-### Step 2 — Implement confusion matrix from scratch
-Implement:
-
-- `confusion_matrix(y_true, y_pred, labels=None)`
-- normalization modes:
-  - none
-  - row-normalized (recall-like)
-  - column-normalized (precision-like)
-
-Also implement:
-
-- extract TP/FP/FN/TN (binary)
-- per-class TP/FP/FN for multi-class
-
-### Step 3 — Implement metrics derived from CM
-Metrics to implement and explain:
-
-- Accuracy
-- Precision, Recall
-- F1-score
-- Macro average vs micro average vs weighted average
-
-### Step 4 — Add “explainability” views
-Even without SHAP/LIME, you can add explainability via analysis of errors:
-
-- Top confusions (pairs of classes with most mistakes)
-- Per-class recall (which classes the model fails to detect)
-- Per-class precision (which predicted classes are often wrong)
-
-### Step 5 — Build the Streamlit app
-App sections:
-
-- Dataset selector (synthetic / iris)
-- Model selector:
-  - baseline: `sklearn.linear_model.LogisticRegression`
-  - optional: simple MLP
-- Training controls:
-  - train/test split
-  - random seed
-  - threshold (binary)
-- Outputs:
-  - confusion matrix plot
-  - classification report-like metrics table
-  - top confusions
-
-### Step 6 — Optional: regression CM adaptation
-Explain (in README/docs) that CM is fundamentally for **discrete labels**.
-
-For regression you can:
-
-- **bin** y into intervals (e.g., quantiles or fixed-width bins)
-- treat bins as classes
-- compute a confusion matrix on those binned labels
-
-Deliverable:
-
-- `binned_confusion_matrix(y_true, y_pred, bins)`
-- note tradeoffs: information loss, dependence on bin definition
-
----
-
-## How you’ll run it (target UX)
-
-### Install
 ```bash
 pip install -r requirements.txt
 ```
 
-### Run the Streamlit app (to be added)
+5. **Download the dataset** from Kaggle and place it in the repo root as `atp_tennis.csv`.
+6. **Verify columns** (from your file):
+
+- `Tournament`, `Date`, `Series`, `Court`, `Surface`, `Round`, `Best of`,
+  `Player_1`, `Player_2`, `Winner`, `Rank_1`, `Rank_2`, `Pts_1`, `Pts_2`,
+  `Odd_1`, `Odd_2`, `Score`.
+
+7. **Train and save the model** (CLI or from a notebook cell):
+
+```bash
+python atp_mlp_keras.py atp_tennis.csv
+```
+
+This creates the files Streamlit will load:
+
+- `outputs/atp_model.keras`
+- `outputs/atp_scaler.joblib`
+- `outputs/atp_model_metadata.json`
+
+8. **(Optional) Export confusion matrix to PDF**:
+
+```bash
+python atp_mlp_keras.py atp_tennis.csv --export-pdf outputs/confusion_matrix.pdf
+```
+
+9. **Run the Streamlit app**:
+
 ```bash
 PYTHONPATH=src streamlit run apps/confusion_matrix_app.py
 ```
 
-### Run tests
-```bash
-PYTHONPATH=src python -m unittest -q
-```
-
----
-
-## Next action I can take in this repo
-
-If you want, I can now **apply the structure above** by committing:
-
-- add Streamlit to `requirements.txt`
-- add `docs/PROJECT_PLAN.md` (detailed checklist)
-- add a first `apps/confusion_matrix_app.py` skeleton
-- add CM + metrics modules + starter tests
-
-Tell me if you prefer:
-
-1) **minimal** (only docs + dependencies), or
-2) **full starter implementation** (docs + code + app + tests).
+10. **In the app**, click "Load saved model", use "Download confusion matrix (PDF)",
+    and try the **Player vs Player** prediction section.

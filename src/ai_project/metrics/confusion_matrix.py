@@ -12,7 +12,6 @@ For multi-class classification with labels L0..LK-1:
 
 So cm[i][j] is the number of samples whose true label is i and predicted label is j.
 """
-
 from __future__ import annotations
 
 from typing import Iterable, Sequence
