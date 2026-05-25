@@ -11,9 +11,28 @@ from sklearn.preprocessing import LabelEncoder
 
 DATE_COL = "Date"
 TARGET_COL = "Favorite_Wins"
-REQUIRED_COLUMNS = ["Rank_1", "Rank_2", "Player_1", "Player_2", "Winner", "Surface"]
-FEATURE_COLUMNS = ["Rank_Diff", "Surface_Encoded", "Favorite_Form", "Underdog_Form"]
-FORM_WINDOW_DEFAULT = 10
+POINTS_COL_1 = "Pts_1"
+POINTS_COL_2 = "Pts_2"
+# These are the raw CSV fields the project must have before it can build model inputs.
+REQUIRED_COLUMNS = [
+    "Rank_1",
+    "Rank_2",
+    POINTS_COL_1,
+    POINTS_COL_2,
+    "Player_1",
+    "Player_2",
+    "Winner",
+    "Surface",
+]
+# Keep this list in the exact order expected by the scaler, Keras model, and Streamlit app.
+FEATURE_COLUMNS = [
+    "Rank_Diff",
+    "Surface_Encoded",
+    "Favorite_Form",
+    "Underdog_Form",
+    "Pts_Diff",
+]
+FORM_WINDOW_DEFAULT = 30
 FORM_DEFAULT_RATE = 0.5
 
 
@@ -26,24 +45,11 @@ def ensure_columns(df: pd.DataFrame, required: Iterable[str]) -> None:
         )
 
 
-def filter_years(df: pd.DataFrame, start_year: int, end_year: int) -> pd.DataFrame:
-    ensure_columns(df, [DATE_COL])
-    df = df.copy()
-    df[DATE_COL] = pd.to_datetime(df[DATE_COL], errors="coerce")
-    df = df.dropna(subset=[DATE_COL])
-    df = df[(df[DATE_COL].dt.year >= start_year) & (df[DATE_COL].dt.year <= end_year)]
-    if df.empty:
-        raise ValueError(
-            f"No rows found between {start_year} and {end_year}. "
-            "Check the dataset or adjust the year filter."
-        )
-    return df
-
-
 def validate_and_clean(
     df: pd.DataFrame,
     required: list[str] | None = None,
 ) -> tuple[pd.DataFrame, dict]:
+    """Check required data, report data-quality issues, and remove unusable rows."""
     required = required or REQUIRED_COLUMNS
     ensure_columns(df, required)
     missing_counts = df[required].isna().sum()
@@ -71,6 +77,7 @@ def sort_matches(df: pd.DataFrame) -> pd.DataFrame:
 def build_surface_tools(
     df: pd.DataFrame,
 ) -> tuple[LabelEncoder, dict[str, float] | None]:
+    """Create the surface encoder used by both evaluation rows and manual predictions."""
     surface = df["Surface"].fillna(df["Surface"].mode(dropna=True)[0])
     encoder = LabelEncoder()
     encoder.fit(surface)
@@ -106,13 +113,15 @@ def build_player_stats(
     df: pd.DataFrame,
     *,
     form_window: int,
-) -> tuple[list[str], dict[str, float], dict[str, float]]:
+) -> tuple[list[str], dict[str, float], dict[str, float], dict[str, float]]:
     """Build latest rank/form lookup tables for the prediction form."""
     df = sort_matches(df)
     history: dict[str, deque[int]] = defaultdict(lambda: deque(maxlen=form_window))
     latest_rank: dict[str, float] = {}
+    latest_points: dict[str, float] = {}
     players: set[str] = set()
 
+    # Walk in date order so the app uses the most recent rank/points and final form.
     for _, row in df.iterrows():
         player_1 = str(row["Player_1"])
         player_2 = str(row["Player_2"])
@@ -121,10 +130,16 @@ def build_player_stats(
 
         rank_1 = pd.to_numeric(row["Rank_1"], errors="coerce")
         rank_2 = pd.to_numeric(row["Rank_2"], errors="coerce")
+        points_1 = pd.to_numeric(row[POINTS_COL_1], errors="coerce")
+        points_2 = pd.to_numeric(row[POINTS_COL_2], errors="coerce")
         if pd.notna(rank_1):
             latest_rank[player_1] = float(rank_1)
         if pd.notna(rank_2):
             latest_rank[player_2] = float(rank_2)
+        if pd.notna(points_1):
+            latest_points[player_1] = float(points_1)
+        if pd.notna(points_2):
+            latest_points[player_2] = float(points_2)
 
         if winner == player_1:
             history[player_1].append(1)
@@ -140,7 +155,7 @@ def build_player_stats(
             FORM_DEFAULT_RATE if len(hist) == 0 else sum(hist) / len(hist)
         )
 
-    return sorted(players), latest_rank, form_rate
+    return sorted(players), latest_rank, latest_points, form_rate
 
 
 def compute_form_rates(
@@ -187,22 +202,37 @@ def build_features(
     ensure_columns(df, REQUIRED_COLUMNS)
     df = df.dropna(subset=REQUIRED_COLUMNS)
 
+    # Rows with invalid numeric values cannot produce reliable rank/points features.
     rank_1 = pd.to_numeric(df["Rank_1"], errors="coerce")
     rank_2 = pd.to_numeric(df["Rank_2"], errors="coerce")
-    valid = rank_1.notna() & rank_2.notna() & (rank_1 != rank_2)
+    points_1 = pd.to_numeric(df[POINTS_COL_1], errors="coerce")
+    points_2 = pd.to_numeric(df[POINTS_COL_2], errors="coerce")
+    valid = (
+        rank_1.notna()
+        & rank_2.notna()
+        & points_1.notna()
+        & points_2.notna()
+        & (rank_1 != rank_2)
+    )
     df = df[valid].copy()
     if df.empty:
-        raise ValueError("No rows with valid ranks after filtering.")
+        raise ValueError("No rows with valid ranks and points.")
 
     df = sort_matches(df)
 
     rank_1 = pd.to_numeric(df["Rank_1"], errors="coerce").to_numpy()
     rank_2 = pd.to_numeric(df["Rank_2"], errors="coerce").to_numpy()
+    points_1 = pd.to_numeric(df[POINTS_COL_1], errors="coerce").to_numpy()
+    points_2 = pd.to_numeric(df[POINTS_COL_2], errors="coerce").to_numpy()
     favorite_is_p1 = rank_1 < rank_2
 
     favorite_rank = np.where(favorite_is_p1, rank_1, rank_2)
     underdog_rank = np.where(favorite_is_p1, rank_2, rank_1)
     rank_diff = favorite_rank - underdog_rank
+    # Points follow the same favorite/underdog orientation as ranks.
+    favorite_points = np.where(favorite_is_p1, points_1, points_2)
+    underdog_points = np.where(favorite_is_p1, points_2, points_1)
+    points_diff = favorite_points - underdog_points
 
     player_1 = df["Player_1"].astype(str).to_numpy()
     player_2 = df["Player_2"].astype(str).to_numpy()
@@ -228,16 +258,19 @@ def build_features(
     else:
         surface_encoded = surface_text
 
+    # Form features use only matches that happened before each row, avoiding data leakage.
     form_p1, form_p2 = compute_form_rates(df, window=form_window)
     favorite_form = np.where(favorite_is_p1, form_p1, form_p2)
     underdog_form = np.where(favorite_is_p1, form_p2, form_p1)
 
+    # Final training/evaluation table: every row must match FEATURE_COLUMNS exactly.
     features = pd.DataFrame(
         {
             "Rank_Diff": rank_diff,
             "Surface_Encoded": surface_encoded,
             "Favorite_Form": favorite_form,
             "Underdog_Form": underdog_form,
+            "Pts_Diff": points_diff,
         }
     )
 

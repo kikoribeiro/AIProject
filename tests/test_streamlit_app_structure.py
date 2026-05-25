@@ -2,7 +2,23 @@ from __future__ import annotations
 
 import unittest
 
+import numpy as np
+from sklearn.metrics import log_loss
+
 from apps import confusion_matrix_app
+
+
+class IdentityScaler:
+    def transform(self, x: np.ndarray) -> np.ndarray:
+        return x
+
+
+class FixedProbabilityModel:
+    def __init__(self, probabilities: list[float]) -> None:
+        self.probabilities = np.asarray(probabilities, dtype=float)
+
+    def predict(self, x: np.ndarray, verbose: int = 0) -> np.ndarray:
+        return self.probabilities.reshape(-1, 1)
 
 
 class StreamlitAppStructureTest(unittest.TestCase):
@@ -21,7 +37,6 @@ class StreamlitAppStructureTest(unittest.TestCase):
 
     def test_streamlit_app_uses_shared_feature_helpers(self) -> None:
         duplicated_feature_helpers = [
-            "filter_years",
             "validate_and_clean",
             "sort_matches",
             "build_surface_tools",
@@ -42,6 +57,48 @@ class StreamlitAppStructureTest(unittest.TestCase):
             source = fh.read()
 
         self.assertIn("Baseline comparison", source)
+
+    def test_streamlit_app_uses_the_whole_csv_by_default(self) -> None:
+        source_path = confusion_matrix_app.__file__
+        with open(source_path, encoding="utf-8") as fh:
+            source = fh.read()
+
+        self.assertIn("Rows after cleaning", source)
+
+    def test_streamlit_prediction_form_uses_points_feature_without_odds_inputs(self) -> None:
+        source_path = confusion_matrix_app.__file__
+        with open(source_path, encoding="utf-8") as fh:
+            source = fh.read()
+
+        self.assertIn("Pts_Diff", source)
+        self.assertNotIn("Player A decimal odds", source)
+        self.assertNotIn("Player B decimal odds", source)
+        self.assertNotIn("Odd_Diff", source)
+
+    def test_streamlit_app_defaults_to_upset_friendly_threshold(self) -> None:
+        self.assertEqual(confusion_matrix_app.DEFAULT_DECISION_THRESHOLD, 0.60)
+
+    def test_saved_model_evaluation_returns_log_loss_from_probabilities(self) -> None:
+        x = np.zeros((4, 5), dtype=float)
+        y = np.asarray([0, 1, 1, 0], dtype=int)
+        probabilities = [0.1, 0.8, 0.4, 0.9]
+
+        cm, metrics, importance, log_loss_value = confusion_matrix_app.evaluate_loaded_model(
+            FixedProbabilityModel(probabilities),
+            IdentityScaler(),
+            x,
+            y,
+            threshold=0.5,
+            feature_count=5,
+        )
+
+        self.assertEqual(cm, [[1, 1], [1, 1]])
+        self.assertEqual(metrics["total"], 4)
+        np.testing.assert_allclose(importance, np.zeros(5))
+        self.assertAlmostEqual(
+            log_loss_value,
+            log_loss(y, probabilities, labels=confusion_matrix_app.LABELS),
+        )
 
 
 if __name__ == "__main__":

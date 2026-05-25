@@ -1,0 +1,15 @@
+{
+  "batch_size": 32,
+  "data_path": "atp_tennis.csv",
+  "data_scope": "full_csv",
+  "epochs": 50,
+  "feature_cols": [
+    "Rank_Diff",
+    "Surface_Encoded",
+    "Favorite_Form",
+    "Underdog_Form",
+    "Pts_Diff"
+  ],
+  "form_window": 30,
+  "target": "Favorite_Wins"
+}

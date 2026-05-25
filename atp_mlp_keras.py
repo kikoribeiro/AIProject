@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import (
     classification_report,
     confusion_matrix,
+    log_loss,
     precision_recall_fscore_support,
 )
 from sklearn.model_selection import StratifiedKFold, StratifiedShuffleSplit
@@ -48,8 +49,7 @@ except ModuleNotFoundError:
 
 RANDOM_SEED = 42
 DATA_PATH = "atp_tennis.csv"
-START_YEAR = 2018
-END_YEAR = 2026
+DEFAULT_DECISION_THRESHOLD = 0.60
 LABELS = [0, 1]
 LABEL_NAMES = ["Upset (0)", "Favorite Wins (1)"]
 TRAIN_RATIO = 0.6
@@ -63,6 +63,7 @@ def set_seeds(seed: int = RANDOM_SEED) -> None:
 
 
 def split_train_val_test(y: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Create a balanced 60/20/20 split for reporting dataset sizes."""
     if not np.isclose(TRAIN_RATIO + VAL_RATIO + TEST_RATIO, 1.0):
         raise ValueError("Train/val/test ratios must sum to 1.0")
 
@@ -97,8 +98,8 @@ def load_dataset(
             f"CSV not found at '{path}'. Update DATA_PATH or pass --data-path."
         )
 
+    # Training uses the full CSV; cleaning and feature creation live in shared helpers.
     df = pd.read_csv(path)
-    df = atp_features.filter_years(df, START_YEAR, END_YEAR)
     df, summary = atp_features.validate_and_clean(df)
 
     missing_counts = summary["missing_counts"]
@@ -162,11 +163,12 @@ def export_confusion_matrix_pdf(cm: list[list[int]], output_path: str) -> None:
 
 
 def build_model(input_dim: int) -> keras.Model:
+    """Small MLP: enough for a course demo without hiding the feature logic."""
     model = keras.Sequential(
         [
             layers.Input(shape=(input_dim,)),
-            layers.Dense(12, activation="relu"),
-            layers.Dense(8, activation="relu"),
+            layers.Dense(12, activation="relu", kernel_initializer="he_normal"),
+            layers.Dense(8, activation="relu", kernel_initializer="he_normal"),
             layers.Dense(1, activation="sigmoid"),
         ]
     )
@@ -213,9 +215,13 @@ def train_with_stratified_kfold(
     skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=RANDOM_SEED)
     all_true: list[int] = []
     all_pred: list[int] = []
+    all_prob: list[float] = []
     weight_importances: list[np.ndarray] = []
 
+    print(f"Decision threshold: {DEFAULT_DECISION_THRESHOLD:.2f}")
+
     for fold_idx, (train_idx, test_idx) in enumerate(skf.split(x, y), start=1):
+        # Fit a new scaler per fold so test rows never influence training scaling.
         scaler = StandardScaler()
         x_train = scaler.fit_transform(x[train_idx])
         x_test = scaler.transform(x[test_idx])
@@ -232,10 +238,11 @@ def train_with_stratified_kfold(
         )
 
         y_prob = model.predict(x_test, verbose=0).ravel()
-        y_pred = (y_prob >= 0.5).astype(int)
+        y_pred = (y_prob >= DEFAULT_DECISION_THRESHOLD).astype(int)
 
         all_true.extend(y_test.tolist())
         all_pred.extend(y_pred.tolist())
+        all_prob.extend(y_prob.tolist())
 
         first_layer_weights = model.layers[0].get_weights()[0]
         importance = np.mean(np.abs(first_layer_weights), axis=1)
@@ -247,6 +254,7 @@ def train_with_stratified_kfold(
     cm_all = confusion_matrix(all_true, all_pred, labels=LABELS)
     print("\nConfusion matrix (all folds):")
     print(cm_all)
+    print(f"\nLog loss (all folds): {log_loss(all_true, all_prob, labels=LABELS):.4f}")
     print("\nClassification report (all folds):")
     print(
         classification_report(
@@ -269,6 +277,7 @@ def train_with_stratified_kfold(
         f1_manual = 2.0 * (precision * recall) / (precision + recall)
     print(f"Manual F1: {f1_manual:.4f}")
 
+    # Main reality check: the MLP should beat "favorite always wins" to be useful.
     baseline = favorite_wins_baseline(all_true, labels=LABELS)
     baseline_metrics = baseline["metrics"]
     baseline_positive = next(m for m in baseline_metrics["per_class"] if m.label == 1)
@@ -297,7 +306,7 @@ def main() -> None:
     set_seeds()
 
     parser = argparse.ArgumentParser(
-        description="Train an MLP to predict ATP favorite wins (2018-2026)."
+        description="Train an MLP to predict ATP favorite wins from the full CSV."
     )
     parser.add_argument(
         "data_path",
@@ -315,7 +324,7 @@ def main() -> None:
         "--form-window",
         type=int,
         default=atp_features.FORM_WINDOW_DEFAULT,
-        help="Number of previous matches to compute form (default: 10).",
+        help=f"Number of previous matches to compute form (default: {atp_features.FORM_WINDOW_DEFAULT}).",
     )
     parser.add_argument(
         "--epochs",
@@ -368,6 +377,7 @@ def main() -> None:
     )
 
     if not args.no_save_model:
+        # Streamlit must load both artifacts because the model expects scaled features.
         final_model, final_scaler = train_final_model(
             x,
             y,
@@ -386,8 +396,7 @@ def main() -> None:
                 "form_window": args.form_window,
                 "epochs": args.epochs,
                 "batch_size": args.batch_size,
-                "start_year": START_YEAR,
-                "end_year": END_YEAR,
+                "data_scope": "full_csv",
                 "target": atp_features.TARGET_COL,
             },
         )

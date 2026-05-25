@@ -50,6 +50,7 @@ def save_model_artifacts(
     model.save(model_path)
     joblib.dump(scaler, scaler_path)
 
+    # Metadata explains how the model was trained: feature order, form window, etc.
     with open(metadata_path, "w", encoding="utf-8") as fh:
         json.dump(metadata or {}, fh, indent=2, sort_keys=True)
 
@@ -86,6 +87,7 @@ def load_model_artifacts(
     model = keras_module.models.load_model(model_path)
     scaler = joblib.load(scaler_path)
 
+    # Streamlit reads this to warn when app settings differ from training settings.
     with open(metadata_path, "r", encoding="utf-8") as fh:
         metadata = json.load(fh)
 

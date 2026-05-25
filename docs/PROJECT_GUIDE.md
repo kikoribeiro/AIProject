@@ -20,12 +20,13 @@ The emphasis is not just accuracy, but **confusion matrix evaluation** and **exp
 
 Source: Kaggle **"ATP Tennis Dataset (2000–2025)"**.
 
-For this project, use matches from **2018–2026**.
+For this project, use every row from the CSV after cleaning.
 
 Required columns (present in your file):
 
 - `Date`
 - `Rank_1`, `Rank_2`
+- `Pts_1`, `Pts_2`
 - `Player_1`, `Player_2`, `Winner`
 - `Surface` (or `Surface_Encoded`)
 
@@ -39,6 +40,7 @@ Define the favorite as the **lower rank number**:
 - `Surface_Encoded` = label-encoded surface (Clay/Grass/Hard)
 - `Favorite_Form` = rolling win rate of the favorite (previous matches only)
 - `Underdog_Form` = rolling win rate of the underdog (previous matches only)
+- `Pts_Diff` = ATP points of the favorite - ATP points of the underdog
 
 Handle NaNs by filling with the column median.
 
@@ -46,9 +48,9 @@ Handle NaNs by filling with the column median.
 
 ## Model architecture (Keras)
 
-- Input layer: 4 features
-- Hidden layer 1: 12 neurons, ReLU
-- Hidden layer 2: 8 neurons, ReLU
+- Input layer: 5 features
+- Hidden layer 1: 12 neurons, ReLU, He normal initialization
+- Hidden layer 2: 8 neurons, ReLU, He normal initialization
 - Output: 1 neuron, Sigmoid
 
 Loss: `binary_crossentropy`, optimizer: Adam.
@@ -93,7 +95,7 @@ This mirrors the idea of “weight influence” shown in the fw/bw visualization
 The app at `apps/confusion_matrix_app.py`:
 
 - Loads the ATP CSV
-- Filters to 2018–2026
+- Cleans missing and duplicate rows
 - Loads the saved model/scaler artifacts created by the notebook or CLI
 - Displays confusion matrix + metrics + feature importance
 - Exports the confusion matrix as a PDF
