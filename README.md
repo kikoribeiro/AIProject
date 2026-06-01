@@ -1,4 +1,4 @@
-# AIProject: ATP Tennis Favorite-Wins Prediction
+# Tennis Predicter: ATP Tennis Favorite-Wins Prediction
 
 ## Project Overview
 
@@ -429,7 +429,7 @@ and interactive matchup predictions.
 
 ---
 
-# AIProject: Previsão de Vitória do Favorito no ATP Tennis
+# Tennis Predicter: Previsão de Vitória do Favorito no ATP Tennis
 
 ## Visão Geral do Projeto
 
