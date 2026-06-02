@@ -235,6 +235,30 @@ favorite already has the better ranking, a useful model should do more than
 repeat this assumption. The MLP is more convincing if it improves over the
 baseline in accuracy, F1 score, or its ability to detect upsets.
 
+## Overfitting Check
+
+The training script also runs an overfitting check. This trains a diagnostic
+model with the train/validation/test split and saves a graph comparing:
+
+- training loss vs validation loss
+- training accuracy vs validation accuracy
+
+The graph is saved by default at:
+
+```text
+outputs/overfitting_check.png
+```
+
+This graph helps show whether the model is generalizing or only memorizing the
+training data. If training loss keeps decreasing while validation loss increases,
+or if training accuracy is much higher than validation accuracy, that can be a
+sign of overfitting.
+
+The script also prints a short summary with the final train/validation gaps and
+a warning when the gap suggests possible overfitting. This diagnostic step does
+not replace the K-fold evaluation; it is an extra visual check for model
+behavior during training.
+
 ## Streamlit Application
 
 The Streamlit app is located at:
@@ -378,6 +402,12 @@ Useful training options:
 
 ```bash
 python atp_mlp_keras.py atp_tennis.csv --epochs 100 --batch-size 64 --form-window 30
+```
+
+Choose a custom overfitting graph path:
+
+```bash
+python atp_mlp_keras.py atp_tennis.csv --overfitting-graph outputs/my_overfitting_graph.png
 ```
 
 ## Run The Streamlit App
@@ -674,6 +704,31 @@ já tem melhor ranking, um modelo útil deve fazer mais do que repetir essa
 suposição. O MLP é mais convincente se melhorar o baseline em accuracy, F1 score
 ou capacidade de detetar surpresas.
 
+## Verificação de Overfitting
+
+O script de treino também executa uma verificação de overfitting. Esta etapa
+treina um modelo de diagnóstico com a divisão train/validation/test e guarda um
+gráfico que compara:
+
+- loss de treino vs loss de validação
+- accuracy de treino vs accuracy de validação
+
+Por defeito, o gráfico é guardado em:
+
+```text
+outputs/overfitting_check.png
+```
+
+Este gráfico ajuda a perceber se o modelo está a generalizar ou se está apenas a
+memorizar os dados de treino. Se a loss de treino continuar a descer enquanto a
+loss de validação sobe, ou se a accuracy de treino for muito superior à accuracy
+de validação, isso pode ser sinal de overfitting.
+
+O script também imprime um pequeno resumo com as diferenças finais entre treino
+e validação, e mostra um aviso quando essa diferença sugere possível
+overfitting. Esta verificação não substitui a avaliação K-fold; é uma análise
+visual extra sobre o comportamento do modelo durante o treino.
+
 ## Aplicação Streamlit
 
 A aplicação Streamlit está localizada em:
@@ -820,6 +875,12 @@ Opções úteis de treino:
 
 ```bash
 python atp_mlp_keras.py atp_tennis.csv --epochs 100 --batch-size 64 --form-window 30
+```
+
+Escolher um caminho personalizado para o gráfico de overfitting:
+
+```bash
+python atp_mlp_keras.py atp_tennis.csv --overfitting-graph outputs/my_overfitting_graph.png
 ```
 
 ## Executar a Aplicação Streamlit
