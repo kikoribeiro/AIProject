@@ -1,4 +1,4 @@
-# AIProject — ATP Tennis Favorite Wins (Project Guide)
+# TennisPredicter — ATP Tennis Favorite Wins (Project Guide)
 
 This repository is a starter base for an **Introduction to AI / Machine Learning** project in **Python**.
 

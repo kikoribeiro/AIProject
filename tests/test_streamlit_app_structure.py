@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import unittest
 
 import numpy as np
@@ -77,6 +78,31 @@ class StreamlitAppStructureTest(unittest.TestCase):
 
     def test_streamlit_app_defaults_to_upset_friendly_threshold(self) -> None:
         self.assertEqual(confusion_matrix_app.DEFAULT_DECISION_THRESHOLD, 0.60)
+
+    def test_cm_normalization_defaults_to_true_mode(self) -> None:
+        source_path = confusion_matrix_app.__file__
+        with open(source_path, encoding="utf-8") as fh:
+            tree = ast.parse(fh.read())
+
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            if not isinstance(node.func, ast.Attribute):
+                continue
+            if node.func.attr != "selectbox":
+                continue
+            if not node.args or not isinstance(node.args[0], ast.Constant):
+                continue
+            if node.args[0].value != "CM normalization":
+                continue
+
+            index_keywords = [keyword for keyword in node.keywords if keyword.arg == "index"]
+            self.assertEqual(len(index_keywords), 1)
+            self.assertIsInstance(index_keywords[0].value, ast.Constant)
+            self.assertEqual(index_keywords[0].value.value, 1)
+            return
+
+        self.fail("CM normalization selectbox not found")
 
     def test_saved_model_evaluation_returns_log_loss_from_probabilities(self) -> None:
         x = np.zeros((4, 5), dtype=float)

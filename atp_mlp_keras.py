@@ -36,6 +36,7 @@ try:
         save_model_artifacts,
     )
     from ai_project.metrics.baselines import favorite_wins_baseline
+    from ai_project.metrics.plots import CONFUSION_MATRIX_CMAP, CONFUSION_MATRIX_TEXT_COLOR
 except ModuleNotFoundError:
     sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
     from ai_project import atp_features
@@ -46,6 +47,7 @@ except ModuleNotFoundError:
         save_model_artifacts,
     )
     from ai_project.metrics.baselines import favorite_wins_baseline
+    from ai_project.metrics.plots import CONFUSION_MATRIX_CMAP, CONFUSION_MATRIX_TEXT_COLOR
 
 RANDOM_SEED = 42
 DATA_PATH = "atp_tennis.csv"
@@ -55,6 +57,9 @@ LABEL_NAMES = ["Upset (0)", "Favorite Wins (1)"]
 TRAIN_RATIO = 0.6
 VAL_RATIO = 0.2
 TEST_RATIO = 0.2
+DEFAULT_OVERFITTING_GRAPH_PATH = "outputs/overfitting_check.png"
+OVERFITTING_ACCURACY_GAP_THRESHOLD = 0.10
+OVERFITTING_LOSS_GAP_THRESHOLD = 0.15
 
 
 def set_seeds(seed: int = RANDOM_SEED) -> None:
@@ -121,7 +126,7 @@ def _plot_confusion_matrix(
     title: str,
 ) -> plt.Figure:
     fig, ax = plt.subplots(figsize=(6, 5))
-    im = ax.imshow(cm, interpolation="nearest", cmap="Blues")
+    im = ax.imshow(cm, interpolation="nearest", cmap=CONFUSION_MATRIX_CMAP)
     ax.figure.colorbar(im, ax=ax)
 
     ax.set(
@@ -136,8 +141,6 @@ def _plot_confusion_matrix(
 
     plt.setp(ax.get_xticklabels(), rotation=45, ha="right", rotation_mode="anchor")
 
-    cm_array = np.asarray(cm)
-    max_value = float(np.max(cm_array)) if cm_array.size else 0.0
     for i in range(len(labels)):
         for j in range(len(labels)):
             ax.text(
@@ -146,7 +149,7 @@ def _plot_confusion_matrix(
                 str(cm[i][j]),
                 ha="center",
                 va="center",
-                color="white" if cm[i][j] > (max_value * 0.5) else "black",
+                color=CONFUSION_MATRIX_TEXT_COLOR,
             )
 
     fig.tight_layout()
@@ -200,6 +203,148 @@ def train_final_model(
         verbose=0,
     )
     return model, scaler
+
+
+def _last_history_value(history: dict[str, list[float]], key: str) -> float:
+    values = history.get(key, [])
+    if not values:
+        return float("nan")
+    return float(values[-1])
+
+
+def _accuracy_from_probabilities(y_true: np.ndarray, y_prob: np.ndarray) -> float:
+    y_pred = (y_prob >= DEFAULT_DECISION_THRESHOLD).astype(int)
+    return float(np.mean(y_true == y_pred))
+
+
+def _plot_training_history(
+    history: dict[str, list[float]],
+    output_path: str,
+) -> None:
+    output_dir = os.path.dirname(output_path)
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+
+    losses = history.get("loss", [])
+    epochs = range(1, len(losses) + 1)
+
+    fig, (loss_ax, accuracy_ax) = plt.subplots(1, 2, figsize=(11, 4))
+    loss_ax.plot(epochs, losses, marker="o", label="Train loss")
+    if "val_loss" in history:
+        loss_ax.plot(
+            epochs,
+            history["val_loss"],
+            marker="o",
+            label="Validation loss",
+        )
+    loss_ax.set_title("Loss")
+    loss_ax.set_xlabel("Epoch")
+    loss_ax.set_ylabel("Binary crossentropy")
+    loss_ax.legend()
+
+    accuracy = history.get("accuracy", [])
+    accuracy_epochs = range(1, len(accuracy) + 1)
+    accuracy_ax.plot(
+        accuracy_epochs,
+        accuracy,
+        marker="o",
+        label="Train accuracy",
+    )
+    if "val_accuracy" in history:
+        accuracy_ax.plot(
+            accuracy_epochs,
+            history["val_accuracy"],
+            marker="o",
+            label="Validation accuracy",
+        )
+    accuracy_ax.set_title("Accuracy")
+    accuracy_ax.set_xlabel("Epoch")
+    accuracy_ax.set_ylabel("Accuracy")
+    accuracy_ax.legend()
+
+    fig.tight_layout()
+    fig.savefig(output_path, format="png", bbox_inches="tight")
+    plt.close(fig)
+
+
+def run_overfitting_check(
+    x: np.ndarray,
+    y: np.ndarray,
+    *,
+    train_idx: np.ndarray,
+    val_idx: np.ndarray,
+    test_idx: np.ndarray,
+    epochs: int,
+    batch_size: int,
+    graph_path: str = DEFAULT_OVERFITTING_GRAPH_PATH,
+) -> dict[str, float | str | bool]:
+    """Train a diagnostic holdout model and save train-vs-validation curves."""
+    scaler = StandardScaler()
+    x_train = scaler.fit_transform(x[train_idx])
+    x_val = scaler.transform(x[val_idx])
+    x_test = scaler.transform(x[test_idx])
+    y_train = y[train_idx]
+    y_val = y[val_idx]
+    y_test = y[test_idx]
+
+    model = build_model(input_dim=x_train.shape[1])
+    fit_result = model.fit(
+        x_train,
+        y_train,
+        validation_data=(x_val, y_val),
+        epochs=epochs,
+        batch_size=batch_size,
+        verbose=0,
+    )
+    history = getattr(fit_result, "history", {})
+    _plot_training_history(history, graph_path)
+
+    train_accuracy = _last_history_value(history, "accuracy")
+    val_accuracy = _last_history_value(history, "val_accuracy")
+    train_loss = _last_history_value(history, "loss")
+    val_loss = _last_history_value(history, "val_loss")
+    accuracy_gap = train_accuracy - val_accuracy
+    loss_gap = val_loss - train_loss
+
+    test_prob = model.predict(x_test, verbose=0).ravel()
+    test_accuracy = _accuracy_from_probabilities(y_test, test_prob)
+    test_log_loss = float(log_loss(y_test, test_prob, labels=LABELS))
+
+    possible_overfitting = bool(
+        accuracy_gap > OVERFITTING_ACCURACY_GAP_THRESHOLD
+        or loss_gap > OVERFITTING_LOSS_GAP_THRESHOLD
+    )
+
+    print("\nOverfitting check:")
+    print(f"Final train accuracy: {train_accuracy:.4f}")
+    print(f"Final validation accuracy: {val_accuracy:.4f}")
+    print(f"Train/validation accuracy gap: {accuracy_gap:+.4f}")
+    print(f"Final train loss: {train_loss:.4f}")
+    print(f"Final validation loss: {val_loss:.4f}")
+    print(f"Validation/train loss gap: {loss_gap:+.4f}")
+    print(f"Holdout test accuracy: {test_accuracy:.4f}")
+    print(f"Holdout test log loss: {test_log_loss:.4f}")
+    if possible_overfitting:
+        print(
+            "Possible overfitting: training performance is noticeably better "
+            "than validation performance."
+        )
+    else:
+        print("No strong overfitting signal from the train/validation gap.")
+    print(f"Saved overfitting graph to: {graph_path}")
+
+    return {
+        "train_accuracy": train_accuracy,
+        "val_accuracy": val_accuracy,
+        "accuracy_gap": accuracy_gap,
+        "train_loss": train_loss,
+        "val_loss": val_loss,
+        "loss_gap": loss_gap,
+        "test_accuracy": test_accuracy,
+        "test_log_loss": test_log_loss,
+        "possible_overfitting": possible_overfitting,
+        "graph_path": graph_path,
+    }
 
 
 def train_with_stratified_kfold(
@@ -339,6 +484,11 @@ def main() -> None:
         help="Batch size for each fold and final saved model.",
     )
     parser.add_argument(
+        "--overfitting-graph",
+        default=DEFAULT_OVERFITTING_GRAPH_PATH,
+        help="Path to save the train-vs-validation overfitting check PNG.",
+    )
+    parser.add_argument(
         "--model-path",
         default=DEFAULT_MODEL_PATH,
         help="Where to save the final Keras model for Streamlit.",
@@ -403,6 +553,17 @@ def main() -> None:
         print(f"\nSaved model to: {artifacts.model_path}")
         print(f"Saved scaler to: {artifacts.scaler_path}")
         print(f"Saved metadata to: {artifacts.metadata_path}")
+
+    run_overfitting_check(
+        x,
+        y,
+        train_idx=train_idx,
+        val_idx=val_idx,
+        test_idx=test_idx,
+        epochs=args.epochs,
+        batch_size=args.batch_size,
+        graph_path=args.overfitting_graph,
+    )
 
 
 if __name__ == "__main__":

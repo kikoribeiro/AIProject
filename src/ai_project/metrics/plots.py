@@ -5,6 +5,14 @@ from __future__ import annotations
 from typing import Sequence
 
 import matplotlib.pyplot as plt
+from matplotlib.colors import LinearSegmentedColormap
+
+
+CONFUSION_MATRIX_CMAP = LinearSegmentedColormap.from_list(
+    "professional_confusion",
+    ["#f8fafc", "#eff6ff", "#dbeafe", "#bfdbfe", "#93c5fd"],
+)
+CONFUSION_MATRIX_TEXT_COLOR = "#0f172a"
 
 
 def plot_confusion_matrix(
@@ -15,7 +23,7 @@ def plot_confusion_matrix(
 ) -> plt.Figure:
     """Create a matplotlib figure of a confusion matrix."""
     fig, ax = plt.subplots(figsize=(6, 5))
-    im = ax.imshow(cm, interpolation="nearest", cmap="Blues")
+    im = ax.imshow(cm, interpolation="nearest", cmap=CONFUSION_MATRIX_CMAP)
     ax.figure.colorbar(im, ax=ax)
 
     ax.set(
@@ -35,7 +43,7 @@ def plot_confusion_matrix(
         for j in range(len(labels)):
             ax.text(j, i, f"{cm[i][j]:.2f}" if isinstance(cm[i][j], float) else str(cm[i][j]),
                     ha="center", va="center",
-                    color="white" if cm[i][j] > (max(map(max, cm)) * 0.5) else "black")
+                    color=CONFUSION_MATRIX_TEXT_COLOR)
 
     fig.tight_layout()
     return fig

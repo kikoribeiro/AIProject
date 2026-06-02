@@ -75,7 +75,7 @@ def evaluate_loaded_model(
 
 def main() -> None:
     st.set_page_config(page_title="ATP Tennis MLP", layout="wide")
-    st.title("ATP Tennis MLP - Favorite Wins")
+    st.title("TennisPredicter - Favorite Wins")
     st.write(
         "Load a saved Keras MLP to predict if the favorite player wins. "
         "Train the model first in Jupyter or with the Python script, then use it here "
@@ -114,6 +114,7 @@ def main() -> None:
         normalize_mode = st.selectbox(
             "CM normalization",
             options=["none", "true", "pred"],
+            index=1,
             help=(
                 "none = raw counts; true = row-normalized (recall view); "
                 "pred = column-normalized (precision view)."

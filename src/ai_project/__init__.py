@@ -1,4 +1,4 @@
-"""Base package for the AIProject metrics utilities."""
+"""Base package for the Tennis Predicter metrics utilities."""
 
 from .metrics import classification_metrics, confusion_matrix
 
